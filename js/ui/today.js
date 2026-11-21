@@ -180,6 +180,15 @@ export function mount(root, ctx) {
   render(root, ctx);
 }
 
+/** My base, Shop, Tickets, History. Shown on run days and no run days alike (the shop stays open on weekends). */
+function moreNav(root, ctx) {
+  const nav2 = h("nav", { class: "run-nav", "aria-label": "More" });
+  for (const [screen, label] of [["base", "My base"], ["shop", "Shop"], ["tickets", "Tickets"], ["history", "History"]]) {
+    nav2.append(h("button", { type: "button", "data-go": screen, onclick: () => nav(root, ctx, screen) }, label));
+  }
+  return nav2;
+}
+
 function render(root, ctx) {
   const cfg = ctx.config;
   const dayKey = dayKeyOf(ctx);
@@ -203,6 +212,7 @@ function render(root, ctx) {
       h("h2", null, day && day.off ? "Day off" : "No run today"),
       h("p", { class: "muted" }, "Your streak is safe. Enjoy the day.")));
     if (sunday) wrap.append(sunday);
+    wrap.append(moreNav(root, ctx));
     root.append(wrap);
     return;
   }
@@ -264,10 +274,6 @@ function render(root, ctx) {
   const rack = dishRack(dayKey, ctx.kid);
   if (rack) wrap.append(h("p", { class: "muted dish" }, "Dishwasher this week: " + rack));
 
-  const nav2 = h("nav", { class: "run-nav", "aria-label": "More" });
-  for (const [screen, label] of [["base", "My base"], ["shop", "Shop"], ["tickets", "Tickets"], ["history", "History"]]) {
-    nav2.append(h("button", { type: "button", "data-go": screen, onclick: () => nav(root, ctx, screen) }, label));
-  }
-  wrap.append(nav2);
+  wrap.append(moreNav(root, ctx));
   root.append(wrap);
 }
