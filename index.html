@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Home Base Quest</title>
+<meta name="description" content="After school run: homework, reading and missions that light up your base.">
+<meta name="theme-color" content="#FBF6EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1C1814" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/kid.css">
+<link rel="stylesheet" href="css/parent.css">
+</head>
+<body>
+<header class="app-bar">
+  <span class="app-title">Home Base Quest</span>
+  <button type="button" class="btn-icon" id="mode-switch" hidden aria-label="Switch between kid and parent views">Parent</button>
+  <a class="btn-icon" href="guide.html" aria-label="Help">Help</a>
+  <button type="button" class="btn-icon" id="theme-toggle" aria-label="Switch light or dark">Theme</button>
+</header>
+<main id="app" class="screen" tabindex="-1">
+  <section class="card">
+    <h1>Home Base Quest</h1>
+    <p class="muted">Loading...</p>
+  </section>
+</main>
+<noscript><p class="card">Home Base Quest needs JavaScript turned on.</p></noscript>
+<script type="module">
+// Shell boot (card W2): theme toggle, then the router decides wizard, app or ?demo=.
+const root = document.getElementById("app");
+const KEY = "hbq:theme";
+function applyTheme(t) {
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+}
+try { applyTheme(localStorage.getItem(KEY)); } catch (e) { /* storage blocked: follow the system */ }
+document.getElementById("theme-toggle").addEventListener("click", () => {
+  const dark = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === "dark"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
+  const next = dark ? "light" : "dark";
+  applyTheme(next);
+  try { localStorage.setItem(KEY, next); } catch (e) { /* per device convenience only */ }
+});
+import("./js/router.js").then((m) => m.boot(root)).catch(() => {
+  root.querySelector(".muted").textContent = "The app could not start. Reload the page.";
+});
+if ("serviceWorker" in navigator && !new URLSearchParams(location.search).get("demo")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
