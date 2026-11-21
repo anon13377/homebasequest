@@ -46,10 +46,14 @@ export async function claim(ctx, text) {
   return { ok: true, device };
 }
 
+/** Keys are lowercase letter and digit groups joined by dashes; drop spaces and phone auto capitals. */
+function normKey(k) { return String(k || "").replace(/\s+/g, "").toLowerCase(); }
+
 /** First parent phone: typed url, family key and parent secret (from backend SETUP.md). Checked with one pull. */
 export async function firstParent(ctx, url, fk, secret) {
   if (!okUrl(url)) return { ok: false, why: "The web app address should start with https." };
-  if (!/^[A-Za-z0-9]{20,}$/.test(fk || "") || !/^[A-Za-z0-9]{20,}$/.test(secret || "")) return { ok: false, why: "The keys are 20 or more letters and digits." };
+  fk = normKey(fk); secret = normKey(secret);
+  if (!/^[a-z0-9-]{20,}$/.test(fk) || !/^[a-z0-9-]{20,}$/.test(secret)) return { ok: false, why: "The keys are 20 or more letters, digits and dashes." };
   try {
     const f = ctx.fetch || globalThis.fetch.bind(globalThis);
     const r = await f(url + "?op=pull&fk=" + encodeURIComponent(fk) + "&since=0", { method: "GET" });
