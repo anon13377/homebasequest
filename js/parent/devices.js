@@ -75,6 +75,15 @@ export function renderDevices(body, ctx) {
       h("p", { class: "muted" }, "Open the app on the new device and scan this, or type the code. It works once and expires in about " + mins + " minutes."),
       qrNode(pairText(d.backendUrl || "demo", d.familyKey || "demo", code, role)),
       h("p", { class: "pair-code num", "data-code": "" }, code),
+      h("p", { class: "muted" }, "iPhone or iPad: send the pairing text by AirDrop, then paste it on the new device under Join with a code."),
+      h("div", { class: "btn-row" },
+        h("button", { type: "button", class: "btn-secondary", "data-copy-pair": "", onclick: async (ev) => {
+          const t = pairText(d.backendUrl || "demo", d.familyKey || "demo", code, role);
+          try { await navigator.clipboard.writeText(t); ev.target.textContent = "Copied"; } catch (e) { ev.target.textContent = "Copy failed"; }
+        } }, "Copy pairing text"),
+        typeof navigator !== "undefined" && navigator.share ? h("button", { type: "button", class: "btn-secondary", "data-share-pair": "", onclick: () => {
+          navigator.share({ text: pairText(d.backendUrl || "demo", d.familyKey || "demo", code, role) }).catch(() => {});
+        } }, "Send pairing text") : null),
       h("button", { type: "button", class: "btn-secondary", "data-hide": "", onclick: () => clear(out) }, "Hide")));
   }
   body.append(h("section", { class: "card", "data-editor": "devices" },
