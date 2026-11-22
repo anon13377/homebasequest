@@ -7,7 +7,7 @@ import { DEMO_STATE, DEMO_NOW, DEMO_DAY, DEMO_DEVICE, DEMO_PARENT_DEVICE } from 
 
 export const SCREENS = {
   who: "./ui/who.js", today: "./ui/today.js", step: "./ui/step.js", homework: "./ui/homework.js",
-  base: "./ui/base.js", shop: "./ui/shop.js", tickets: "./ui/tickets.js", history: "./ui/history.js",
+  base: "./ui/base.js", levels: "./ui/levels.js", checklist: "./ui/checklist.js", tickets: "./ui/tickets.js", history: "./ui/history.js",
   photo: "./ui/photo.js", setup: "./setup.js",
   parent: "./parent/board.js", "parent-board": "./parent/board.js", "parent-checks": "./parent/checks.js",
   "parent-requests": "./parent/requests.js", "parent-week": "./parent/week.js",

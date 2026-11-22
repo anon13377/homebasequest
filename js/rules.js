@@ -6,13 +6,16 @@
 import { addDays, at, isSchoolDay, weekStart, weekKey, parseDay } from "./clock.js";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
-const KID_TYPES = ["run.start", "step.done", "hw.set", "buy.request", "crate.open"];
+// OVERHAUL v1: buy.* and crate.open are retired. Old ones in the log are ignored like unknown types.
+const KID_TYPES = ["run.start", "step.done", "hw.set"];
 // SCOPE 3: only the two missions (Zone Mission, Room Reset) land on Verified for a pay on verified kid.
 // Homework, Reading and Land pay on Self for both kids. config.checkSteps overrides this default when present.
 const MISSION_STEPS = ["zone", "reset"];
 const payOnFor = (kidId, step, config) =>
   (config.checkSteps || MISSION_STEPS).includes(step) ? config.payOn[kidId] : "self";
-const PARENT_TYPES = ["check.pass", "check.fix", "buy.approve", "buy.deny", "buy.delivered", "adjust", "bonus.team", "day.off", "config.set"];
+const PARENT_TYPES = ["check.pass", "check.fix", "adjust", "bonus.team", "door.test", "day.off", "config.set"];
+// bonus.team keys -> [token name, once per "day" | "week"].
+const TEAM_BONUS = { "kitchen-closed": ["kitchenClosed", "day"], "tote-dump": ["toteDump", "week"], "tote-timer": ["toteTimer", "week"], "lids-close": ["lidsClose", "week"] };
 
 function clone(v) {
   return v === undefined ? v : JSON.parse(JSON.stringify(v));
@@ -114,17 +117,33 @@ export function crateRoll(kid, week, config) {
   return { kind: "tokens", value: c.tokensMin + Math.floor(r() * (c.tokensMax - c.tokensMin + 1)) };
 }
 
+/** Points earned in the Mon..Sun week holding day (ledger sum, adjustments included, never below 0). */
+export function weekPoints(kid, day) {
+  if (!kid || !validDay(day)) return 0;
+  const ws = weekStart(day);
+  const n = (kid.ledger || []).reduce((a, l) => a + (validDay(l.day) && weekStart(l.day) === ws ? l.tokens : 0), 0);
+  return Math.max(0, n);
+}
+
+/** -> { reached: level | null, next: level | null, points }. Levels from config.levels, lowest first. */
+export function levelFor(points, config) {
+  const levels = (config.levels || []).slice().sort((a, b) => a.at - b.at);
+  let reached = null, next = null;
+  for (const l of levels) { if (points >= l.at) reached = l; else if (!next) next = l; }
+  return { reached, next, points };
+}
+
 /** reduce(events, config) -> State */
 export function reduce(events, config) {
   const cfg = clone(config);
   const kidIds = cfg.kids;
   const state = { kids: {}, jar: { marbles: 0, goal: cfg.jar.goal }, tickets: {}, flags: [] };
   for (const k of kidIds) {
-    state.kids[k] = { balance: 0, held: 0, lifetime: 0, spent: 0, adjustments: 0, streak: 0, streakPrev: 0, shields: 0, unlocks: [], crates: [], days: {}, ledger: [] };
+    state.kids[k] = { balance: 0, held: 0, lifetime: 0, spent: 0, adjustments: 0, streak: 0, streakPrev: 0, shields: 0, unlocks: [], crates: [], days: {}, ledger: [], doorRun: 0, week: 0 };
   }
   // Internal bookkeeping, kept out of the returned state.
   const runDay = {}, paid = new Set(), doneT = {}, hwNone = new Set(), off = new Set();
-  const bonusPaid = new Set(), failWeeks = {}, flagged = new Set();
+  const bonusPaid = new Set(), failWeeks = {}, flagged = new Set(), doorSeen = new Set();
   let asOf = null;
 
   const isKid = (k) => kidIds.includes(k);
@@ -155,40 +174,11 @@ export function reduce(events, config) {
     kid.ledger.push({ seq, day, tokens: amt, why });
   }
 
-  function perfect(k, ws) {
-    let full = 0;
-    for (let i = 0; i < 7; i++) {
-      const x = addDays(ws, i);
-      if (!isSchoolDay(x, cfg)) continue;
-      const d = state.kids[k].days[x];
-      if (d && d.full) full++;
-      else if (!isOff(k, x)) return false;
-    }
-    return full > 0;
-  }
-
-  function weekCheck(k, day, seq) {
-    const ws = weekStart(day);
-    if (perfect(k, ws) && !bonusPaid.has("pw|" + k + "|" + ws)) {
-      bonusPaid.add("pw|" + k + "|" + ws);
-      earn(k, day, cfg.tokens.perfectWeek, "perfect week", seq, false);
-    }
-    if (!bonusPaid.has("tw|" + ws) && kidIds.length > 1 && kidIds.every((x) => perfect(x, ws))) {
-      bonusPaid.add("tw|" + ws);
-      for (const x of kidIds) earn(x, day, cfg.tokens.teamWeek, "team week", seq, false);
-    }
-  }
-
-  function checkComplete(k, d, seq) {
+  // OVERHAUL v1: no run complete, perfect week or team week tokens. A full day still feeds the cosmetic streak.
+  function checkComplete(k, d) {
     const day = state.kids[k].days[d];
     if (!cfg.steps.every((s) => complete(k, s, day.steps[s]))) return;
     day.full = true;
-    if (!bonusPaid.has("rc|" + k + "|" + d)) {
-      bonusPaid.add("rc|" + k + "|" + d);
-      const last = Math.max(...cfg.steps.map((s) => doneT[k + "|" + d + "|" + s] || 0));
-      if (last < at(d, cfg.times.dinnerCutoff)) earn(k, d, cfg.tokens.runComplete, "run complete", seq, true);
-    }
-    weekCheck(k, d, seq);
   }
 
   function payStep(k, d, step, status, seq) {
@@ -236,6 +226,7 @@ export function reduce(events, config) {
     if (KID_TYPES.includes(type) && (ev.role !== "kid" || !isKid(ev.kid))) return;
     if (PARENT_TYPES.includes(type) && ev.role !== "parent") return;
     if (!KID_TYPES.includes(type) && !PARENT_TYPES.includes(type)) return; // unknown types kept, ignored
+    if (type !== "config.set" && validDay(cfg.scoringStart) && ev.day < cfg.scoringStart) return; // fresh start
     if (asOf === null || ev.day > asOf) asOf = ev.day;
     const seq = typeof ev.seq === "number" ? ev.seq : i;
     const data = ev.data && typeof ev.data === "object" ? ev.data : {};
@@ -249,7 +240,6 @@ export function reduce(events, config) {
         day.started = true;
         day.order = cfg.orders.includes(data.order) ? data.order : null;
         runDay[k] = ev.day;
-        if (t < at(ev.day, cfg.times.start)) earn(k, ev.day, cfg.tokens.selfStart, "self start", seq, true);
         return;
       }
       case "hw.set": {
@@ -270,7 +260,7 @@ export function reduce(events, config) {
         day.steps[step] = "self";
         doneT[k + "|" + d + "|" + step] = t;
         payStep(k, d, step, "self", seq);
-        checkComplete(k, d, seq);
+        checkComplete(k, d);
         return;
       }
       case "check.pass":
@@ -283,70 +273,11 @@ export function reduce(events, config) {
         if (type === "check.pass") {
           day.steps[data.step] = "verified";
           payStep(k, d, data.step, "verified", seq);
-          checkComplete(k, d, seq);
+          checkComplete(k, d);
         } else {
           day.steps[data.step] = "fix";
           const items = Array.isArray(data.items) && data.items.length ? data.items : [data.step];
           for (const it of items) if (typeof it === "string") noteFail(k, it, d);
-        }
-        return;
-      }
-      case "buy.request": {
-        const tid = data.ticket, it = shopItem(cfg, data.item);
-        const refuse = (why) => state.flags.push({ type: "refused", kid: k, ticket: typeof tid === "string" ? tid : null, why, day: ev.day });
-        if (typeof tid !== "string" || !tid) return refuse("ticket");
-        if (!it) return refuse("unknown");
-        const kid = state.kids[k];
-        const existing = state.tickets[tid];
-        if (data.team === true) {
-          if (!it.team) return refuse("team");
-          const c = Math.floor(Number(data.price));
-          if (!(c > 0)) return refuse("price");
-          if (existing && (!existing.team || existing.item !== it.id || existing.status !== "held" || contribOf(existing, k) > 0)) return refuse("open");
-          const sum = existing ? Object.values(existing.contrib).reduce((a, b) => a + b, 0) : 0;
-          if (sum + c > it.price) return refuse("price");
-          if (!existing) {
-            const r = canBuy(state, k, it.id, cfg, ev.day);
-            if (!r.ok && r.why !== "balance") return refuse(r.why);
-          }
-          if (kid.balance < c) return refuse("balance");
-          kid.balance -= c;
-          kid.held += c;
-          kid.ledger.push({ seq, day: ev.day, tokens: -c, why: "hold " + it.id });
-          if (existing) existing.contrib[k] = c;
-          else state.tickets[tid] = { id: tid, kid: k, item: it.id, price: it.price, team: true, status: "held", day: ev.day, contrib: { [k]: c } };
-          return;
-        }
-        if (existing) return refuse("open");
-        if (Number(data.price) !== it.price) return refuse("price");
-        const r = canBuy(state, k, it.id, cfg, ev.day);
-        if (!r.ok) return refuse(r.why);
-        kid.balance -= it.price;
-        kid.held += it.price;
-        kid.ledger.push({ seq, day: ev.day, tokens: -it.price, why: "hold " + it.id });
-        state.tickets[tid] = { id: tid, kid: k, item: it.id, price: it.price, team: false, status: "held", day: ev.day, contrib: { [k]: it.price } };
-        return;
-      }
-      case "buy.approve":
-      case "buy.deny":
-      case "buy.delivered": {
-        const tk = state.tickets[data.ticket];
-        if (!tk) return;
-        if (type === "buy.delivered") {
-          if (tk.status === "approved") tk.status = "delivered";
-          return;
-        }
-        if (tk.status !== "held") return;
-        tk.status = type === "buy.approve" ? "approved" : "denied";
-        if (typeof data.reason === "string" && data.reason.trim()) tk.reason = data.reason.trim();
-        for (const [who, c] of Object.entries(tk.contrib)) {
-          const kid = state.kids[who];
-          kid.held -= c;
-          if (type === "buy.approve") kid.spent += c;
-          else {
-            kid.balance += c;
-            kid.ledger.push({ seq, day: ev.day, tokens: c, why: "returned " + tk.item });
-          }
         }
         return;
       }
@@ -363,11 +294,28 @@ export function reduce(events, config) {
         return;
       }
       case "bonus.team": {
-        if (data.key !== "kitchen-closed") return;
-        const key = "kc|" + ev.day;
+        const tb = TEAM_BONUS[data.key];
+        if (!tb) return;
+        const key = data.key + "|" + (tb[1] === "week" ? weekStart(ev.day) : ev.day);
         if (bonusPaid.has(key)) return;
         bonusPaid.add(key);
-        for (const x of kidIds) earn(x, ev.day, cfg.tokens.kitchenClosed, "kitchen closed", seq, false);
+        for (const x of kidIds) earn(x, ev.day, cfg.tokens[tb[0]] || 0, data.key.replace("-", " "), seq, false);
+        return;
+      }
+      case "door.test": {
+        const dt = cfg.doorTest || { kids: [], streak: 5 };
+        if (!isKid(k) || !(dt.kids || []).includes(k)) return;
+        const d = validDay(data.day) ? data.day : ev.day;
+        if (doorSeen.has(k + "|" + d)) return; // one mark per kid per night, first wins
+        doorSeen.add(k + "|" + d);
+        ensureDay(k, d).door = data.pass === true ? "pass" : "fail";
+        const kid = state.kids[k];
+        if (data.pass !== true) { kid.doorRun = 0; return; }
+        kid.doorRun++;
+        if (kid.doorRun >= dt.streak) {
+          kid.doorRun = 0;
+          earn(k, d, cfg.tokens.doorStreak || 0, "door test streak", seq, false);
+        }
         return;
       }
       case "day.off": {
@@ -377,7 +325,6 @@ export function reduce(events, config) {
           off.add(x + "|" + d);
           if (state.kids[x].days[d]) state.kids[x].days[d].off = true;
         }
-        for (const x of who) weekCheck(x, d, seq);
         return;
       }
       case "config.set": {
@@ -385,22 +332,19 @@ export function reduce(events, config) {
         state.jar.goal = cfg.jar.goal;
         return;
       }
-      case "crate.open": {
-        const week = data.week;
-        const kid = state.kids[k];
-        if (typeof week !== "string" || kid.crates.includes(week)) return;
-        const full = Object.keys(kid.days).filter((x) => kid.days[x].full && weekKey(x) === week).sort();
-        if (full.length < cfg.crate.minFullRuns) return;
-        const crateDay = addDays(weekStart(full[0]), (cfg.crate.day + 6) % 7);
-        if (ev.day < crateDay) return;
-        kid.crates.push(week);
-        const roll = crateRoll(k, week, cfg);
-        if (roll.kind === "tokens") earn(k, ev.day, roll.value, "crate " + week, seq, false);
-        else kid.unlocks.push(roll.value);
-        return;
-      }
     }
   });
+
+  // Daily screen break and this week's points (week of the newest event day; UIs use weekPoints with today).
+  const sb = cfg.screenBreak || { minPoints: 40, minutes: 30 };
+  for (const k of kidIds) {
+    const kid = state.kids[k];
+    for (const x of Object.keys(kid.days)) {
+      const d = kid.days[x];
+      d.screen = d.earned >= sb.minPoints && complete(k, "hw", d.steps.hw) ? sb.minutes : 0;
+    }
+    kid.week = asOf ? weekPoints(kid, asOf) : 0;
+  }
 
   // Power Streak, shields and earned unlocks, walked over calendar school days up to the newest event day.
   // The newest day counts if full; if it has a run that is not full the streak shows 0 and streakPrev keeps the carry.
