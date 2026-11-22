@@ -183,6 +183,7 @@ export function mount(root, ctx) {
     h("button", { type: "button", class: "btn-primary", "data-mode": "local",
       onclick: () => namesStep(root, ctx, { mode: "local", role: "parent", kidIds: [] }) }, "Just this device (local only)"),
     h("button", { type: "button", class: "btn-primary", "data-mode": "link", onclick: () => joinStep(root, ctx) }, "Parent Link (phones and tablets together)")),
-    h("p", { class: "muted" }, "Local only keeps everything on this device. Parent Link shares the run with parent phones."));
+    h("p", { class: "muted" }, "Local only keeps everything on this device. Parent Link shares the run with parent phones."),
+    h("p", null, h("a", { href: "../homebasequest-demo/", target: "_blank", rel: "noopener", "data-demo-link": "" }, "Try the demo first")));
   sec.done();
 }
