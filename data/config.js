@@ -18,20 +18,37 @@ export const CONFIG = Object.freeze({
   steps: ["land", "hw", "read", "zone", "reset"],
   orders: ["hw-first", "mission-first"],
 
-  // Tokens (SCOPE 3, TASKS golden numbers).
+  // Points (OVERHAUL v1, matches the printed points.html). Required steps other than the two missions pay 0.
   tokens: {
     land: 0,
-    hw: 5,
-    read: 3,
-    zone: 6,
-    reset: 4,
-    selfStart: 3,
-    runComplete: 2,
-    perfectWeek: 15,
-    teamWeek: 10,
-    kitchenClosed: 10,
+    hw: 0,
+    read: 0,
+    zone: 20,
+    reset: 20,
+    kitchenClosed: 10, // per kid per day, parent button
+    toteDump: 50, // Friday team bonus, each kid, once per week
+    toteTimer: 15, // Friday team bonus, each kid, once per week
+    lidsClose: 25, // Friday team bonus, each kid, once per week
+    doorStreak: 50, // five Door Test passes in a row, doorTest.kids only
   },
-  dailyMax: 23,
+  dailyMax: 40,
+
+  // Fresh start: events dated before this day stay in the Sheet but do not count.
+  scoringStart: "2026-11-23",
+
+  // Weekly levels by points earned Mon..Sun (points reset every week).
+  levels: [
+    { at: 200, name: "Pick a treat" },
+    { at: 250, name: "Movie night" },
+    { at: 295, name: "Game night" },
+    { at: 340, name: "Family outing or Saturday screen day" },
+  ],
+
+  // Daily screen break: both missions (40 pts) and homework done = 30 minutes, else 0.
+  screenBreak: { minPoints: 40, minutes: 30 },
+
+  // Nightly Door Test (Before Bed reset). Parent marks pass; streak passes in a row pay doorStreak.
+  doorTest: { kids: ["m"], streak: 5 },
 
   // E pays on Self (with photo where required), M pays on Verified (addendum answer 7).
   payOn: { e: "self", m: "verified" },
@@ -53,6 +70,8 @@ export const CONFIG = Object.freeze({
     start: "15:45",
     dinnerCutoff: "18:00",
     nudgeAfterMin: 30,
+    quietFrom: "20:00", // nudge() sleeps from here ...
+    quietTo: "06:00", // ... to here, script time zone
     digest: "19:00",
     sundaySummary: "18:00",
   },
@@ -91,16 +110,8 @@ export const CONFIG = Object.freeze({
   // Repeated fail flag (SCOPE 3): same item failing this many weeks in a row.
   flagFailWeeks: 3,
 
-  // Reward Shop default shelf (SCOPE 5, addendum answer 6).
-  // limit: { per: "day" | "week" | null, count } ; team: team buy allowed ; parentSchedules: big one.
-  shop: [
-    { id: "snack", name: "Sugary snack", price: 30, limit: { per: "week", count: 3 }, team: false },
-    { id: "screen30", name: "30 more minutes of screen time", price: 40, limit: { per: "day", count: 1 }, team: false },
-    { id: "dinner", name: "Pick tonight's dinner", price: 60, limit: { per: "week", count: 1 }, team: false },
-    { id: "late30", name: "Stay up 30 minutes late (Fri or Sat)", price: 70, limit: { per: "week", count: 1 }, team: false },
-    { id: "movie", name: "Movie night (you pick the movie)", price: 120, limit: null, team: true },
-    { id: "big", name: "Big one: outing or sleepover", price: 300, limit: null, team: false, parentSchedules: true },
-  ],
+  // Reward Shop retired in OVERHAUL v1 (rewards are the weekly levels). Empty shelf: any buy is refused.
+  shop: [],
 
   // Pushes (SCOPE 6, addendum answers 2 and 4). Each can be switched off.
   pushes: {
