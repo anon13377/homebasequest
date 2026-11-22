@@ -39,5 +39,8 @@ export function renderSettings(body, ctx, rerender) {
       body.say("PIN changed.");
     } }, "Change PIN"),
     h("button", { type: "button", class: "btn-secondary", "data-locknow": "", onclick: () => { pin.lock(); body.say("Locked."); } }, "Lock now"));
-  body.append(sec, pinSec);
+  const demoSec = h("section", { class: "card", "data-editor": "demo" }, h("h2", null, "Demo"),
+    h("p", { class: "muted" }, "A practice copy with made up data. It never touches this device's real data."),
+    h("a", { class: "btn-secondary", href: "../homebasequest-demo/", target: "_blank", rel: "noopener", "data-demo-link": "" }, "Try the demo"));
+  body.append(sec, pinSec, demoSec);
 }
