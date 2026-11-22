@@ -31,13 +31,23 @@ export function renderWeek(body, ctx, rerender) {
       else if (ds.off) line.append(h("span", { class: "chip", "data-off": "" }, "Day off"));
       else {
         line.append(h("span", { class: "chip" + (ds.full ? " st-verified" : ""), "data-full": ds.full ? "yes" : "no" }, ds.full ? "Full run" : "Partial"), " ",
-          h("span", { class: "chip", "data-earned": "" }, ds.earned + " tokens"), " ");
+          h("span", { class: "chip", "data-earned": "" }, ds.earned + " pts"), " ",
+          h("span", { class: "chip", "data-screen-break": String(ds.screen || 0) }, "Screen " + (ds.screen || 0) + " min"), " ");
+        if (ds.door) line.append(h("span", { class: "chip", "data-door": ds.door }, "Door Test " + ds.door), " ");
         const waiting = Object.values(ds.steps).filter((s) => s === "self").length;
         const fix = Object.values(ds.steps).filter((s) => s === "fix").length;
         if (waiting) line.append(h("span", { class: "chip st-self" }, waiting + " " + STATUS_LABELS.self.toLowerCase()), " ");
         if (fix) line.append(h("span", { class: "chip st-fix" }, fix + " " + STATUS_LABELS.fix.toLowerCase()));
       }
       card.append(line);
+      const dt = ctx.config.doorTest || { kids: [] };
+      if ((dt.kids || []).includes(k) && !(ds && ds.door)) {
+        card.append(h("p", { class: "door-row", "data-door-kid": k }, kidLabel(ctx, k) + " Door Test: ",
+          h("button", { type: "button", class: "btn-secondary", "data-door-pass": day, onclick: () =>
+            act(body, ctx, rerender, k, "door.test", { day, pass: true }, "Door Test pass saved.") }, "Pass"), " ",
+          h("button", { type: "button", class: "btn-secondary", "data-door-fail": day, onclick: () =>
+            act(body, ctx, rerender, k, "door.test", { day, pass: false }, "Door Test miss saved.") }, "Miss")));
+      }
     }
     const why = h("input", { type: "text", maxlength: "60", class: "reason", "data-why": "", "aria-label": "Why a day off", placeholder: "Why (sick, trip...)" });
     card.append(why, h("button", { type: "button", class: "btn-secondary", "data-dayoff": day, onclick: () => {
@@ -66,4 +76,13 @@ export function renderWeek(body, ctx, rerender) {
     h("p", { class: "muted" }, "Both kids get " + ctx.config.tokens.kitchenClosed + " tokens, once a day."),
     h("button", { type: "button", class: "btn-secondary", "data-kitchen": "", onclick: () =>
       act(body, ctx, rerender, null, "bonus.team", { key: "kitchen-closed" }, "Bonus given.") }, "Kitchen was closed")));
+  // OVERHAUL v1: Friday team bonuses, each kid, once per week (Verified, parent awarded).
+  const t = ctx.config.tokens;
+  const team = h("section", { class: "card", "data-friday": "" }, h("h2", null, "Friday team bonuses"),
+    h("p", { class: "muted" }, "Each kid gets the points. Once per week each. Door Test: " + (ctx.config.doorTest ? ctx.config.doorTest.streak : 5) + " passes in a row = +" + (t.doorStreak || 0) + "."));
+  for (const [key, name, label] of [["tote-dump", "toteDump", "Tote Dump done, sorted, refilled"], ["tote-timer", "toteTimer", "Beat the 15 min timer"], ["lids-close", "lidsClose", "Every lid closes"]]) {
+    team.append(h("button", { type: "button", class: "btn-secondary", "data-team": key, onclick: () =>
+      act(body, ctx, rerender, null, "bonus.team", { key }, "Bonus given.") }, label + " (+" + (t[name] || 0) + ")"));
+  }
+  body.append(team);
 }

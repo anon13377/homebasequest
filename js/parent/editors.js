@@ -61,5 +61,7 @@ export function renderEditors(body, ctx, rerender) {
     sch.append(field(body, ctx, rerender, label + " (24 hour, like 15:45)", "times." + key, "time", cfg.times[key]));
   }
   sch.append(field(body, ctx, rerender, "Minutes before the Not Started nudge", "times.nudgeAfterMin", "int", cfg.times.nudgeAfterMin, { min: 5, max: 180 }));
-  body.append(shop, tok, sch);
+  // OVERHAUL v1: shop retired, its editor is no longer shown (levels are fixed to the paper chart).
+  if (cfg.shop.length) body.append(shop);
+  body.append(tok, sch);
 }

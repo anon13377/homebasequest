@@ -1,6 +1,7 @@
 // Card W1-H. Parent "Today board": both kids, balance, held, streak, each step's status, photo per step.
 // mount(root, ctx): ctx = { state, config, device, day, go, demo, ... }. Behind the PIN; kid devices see a refusal.
 
+import { weekPoints, levelFor } from "../rules.js";
 import { h, gate, shell, kidIds, kidLabel, STATUS_LABELS, STEP_LABELS, dayKeyOf, photoIdFor, photoBox } from "./common.js";
 
 export async function mount(root, ctx) {
@@ -12,6 +13,11 @@ export function draw(root, ctx) {
   const body = shell(root, ctx, "parent-board", "Today");
   renderBoard(body, ctx);
   return body;
+}
+
+function lvName(ctx, pts) {
+  const lv = levelFor(pts, ctx.config);
+  return lv.reached ? lv.reached.name : "";
 }
 
 export function renderBoard(body, ctx) {
@@ -31,8 +37,9 @@ export function renderBoard(body, ctx) {
     body.append(h("section", { class: "card pcard kid-" + k, "data-kid": k },
       h("h2", null, h("span", { class: "kid-dot", "aria-hidden": "true" }, k.toUpperCase()), " " + kidLabel(ctx, k)),
       h("p", { class: "stats" },
-        h("span", { class: "coin-chip", "data-balance": "" }, kid.balance + " tokens"), " ",
-        h("span", { class: "chip", "data-held": "" }, kid.held + " on hold"), " ",
+        h("span", { class: "coin-chip", "data-balance": "", "data-week-points": "" }, weekPoints(kid, day) + " pts this week"), " ",
+        h("span", { class: "chip", "data-screen-break": String(ds && ds.screen ? ds.screen : 0) }, "Screen break " + (ds && ds.screen ? ds.screen : 0) + " min"), " ",
+        (lvName(ctx, weekPoints(kid, day))) ? h("span", { class: "chip", "data-level": "" }, lvName(ctx, weekPoints(kid, day))) : null, " ",
         h("span", { class: "chip", "data-streak": "" }, "Streak " + kid.streak)),
       ds ? null : h("p", { class: "muted", "data-notstarted": "" }, "Not started yet today."),
       list));
