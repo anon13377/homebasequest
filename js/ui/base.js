@@ -177,7 +177,7 @@ export function mount(root, ctx) {
     list.append(h("li", { class: have ? "have" : "todo", "data-unlock": u.id }, u.name + (have ? " (earned)" : "")));
   }
   wrap.append(h("section", { class: "card" }, h("h2", null, "Upgrades"), list));
-  wrap.append(crateCard(root, ctx));
+  // OVERHAUL v1: Friday Crate retired (no crate tokens); crateCard stays for old unlock art only.
   root.append(wrap);
   return { lit, ups };
 }

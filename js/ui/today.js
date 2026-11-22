@@ -7,18 +7,17 @@
 //   by the state derived from the demo session on the first tap).
 
 import { now, today, weekday, isSchoolDay, parseDay, daysBetween } from "../clock.js";
-import { reduce } from "../rules.js";
+import { reduce, weekPoints, levelFor } from "../rules.js";
 import * as store from "../store.js";
 import { DAYS, TASKS, SUNDAY_BLOCKS } from "../../data/tasks.js";
 import { buildBase, litRooms, upgrades } from "./base.js";
 
 export const STEP_LABELS = { land: "Land", hw: "Homework", read: "Reading", zone: "Zone Mission", reset: "Room Reset" };
 export const SUBJECT_LABELS = { math: "Math", "reading-log": "Reading log", spelling: "Spelling", science: "Science", other: "Other" };
+// OVERHAUL v1: RIGHT AFTER SCHOOL, wording from cards.html.
 export const LAND_ITEMS = [
-  { id: "land-1", text: "Backpack on its hook" },
-  { id: "land-2", text: "Lunchbox to the kitchen" },
-  { id: "land-3", text: "Papers in Dad's tray" },
-  { id: "land-4", text: "Eat your snack" },
+  { id: "land-1", text: "Homework out of the backpack" },
+  { id: "land-2", text: "Backpack back on its hook" },
 ];
 
 // ---------- tiny DOM helpers ----------
@@ -180,13 +179,34 @@ export function mount(root, ctx) {
   render(root, ctx);
 }
 
-/** My base, Shop, Tickets, History. Shown on run days and no run days alike (the shop stays open on weekends). */
+/** My base, Levels, History. Shown on run days and no run days alike. OVERHAUL v1: the shop is retired. */
 function moreNav(root, ctx) {
   const nav2 = h("nav", { class: "run-nav", "aria-label": "More" });
-  for (const [screen, label] of [["base", "My base"], ["shop", "Shop"], ["tickets", "Tickets"], ["history", "History"]]) {
+  for (const [screen, label] of [["base", "My base"], ["levels", "Levels"], ["history", "History"]]) {
     nav2.append(h("button", { type: "button", "data-go": screen, onclick: () => nav(root, ctx, screen) }, label));
   }
   return nav2;
+}
+
+/** OVERHAUL v1: daily screen break. Both missions (40 pts) and homework done = 30 min, else 0. */
+export function screenBreakCard(ctx, day) {
+  const sb = ctx.config.screenBreak || { minPoints: 40, minutes: 30 };
+  const min = day && day.screen ? day.screen : 0;
+  return h("section", { class: "card screen-break" + (min ? " on" : ""), "data-screen-break": String(min), role: "status" },
+    h("h2", null, "Screen break: " + min + " min"),
+    h("p", { class: "muted" }, min ? "Both missions and homework are done. Enjoy!"
+      : "Both missions (" + sb.minPoints + " pts) and homework done = " + sb.minutes + " minutes."));
+}
+
+/** OVERHAUL v1: tick only checklists (0 points). Before School shows on school day mornings. */
+function checklistNav(root, ctx, schoolDay) {
+  const nav3 = h("nav", { class: "run-nav checklists", "aria-label": "Checklists" });
+  const lists = [["kitchen", "Kitchen Shutdown"], ["before-bed", "Before Bed"]];
+  if (schoolDay && new Date(now()).getHours() < 12) lists.unshift(["before-school", "Before School"]);
+  for (const [id, label] of lists) {
+    nav3.append(h("button", { type: "button", "data-list": id, onclick: () => nav(root, ctx, "checklist", { step: id }) }, label));
+  }
+  return nav3;
 }
 
 function render(root, ctx) {
@@ -202,7 +222,7 @@ function render(root, ctx) {
     h("div", { class: "run-who" }, h("span", { class: "kid-dot " + ctx.kid }), h("span", { class: "run-name" }, name)),
     h("h1", { class: "run-title" }, "Today's Run"),
     h("div", { class: "run-stats" },
-      h("span", { class: "coin-chip balance", "data-balance": "" }, String(kid.balance) + " tokens"),
+      h("span", { class: "coin-chip balance", "data-balance": "", "data-week-points": "" }, weekPoints(kid, dayKey) + " pts this week"),
       h("span", { class: "chip streak" }, "Streak " + kid.streak))));
 
   const runDay = isSchoolDay(dayKey, cfg) && !(day && day.off);
@@ -212,6 +232,7 @@ function render(root, ctx) {
       h("h2", null, day && day.off ? "Day off" : "No run today"),
       h("p", { class: "muted" }, "Your streak is safe. Enjoy the day.")));
     if (sunday) wrap.append(sunday);
+    wrap.append(checklistNav(root, ctx, false));
     wrap.append(moreNav(root, ctx));
     root.append(wrap);
     return;
@@ -237,9 +258,10 @@ function render(root, ctx) {
   if (day && day.full) {
     wrap.append(h("section", { class: "card run-done", role: "status" },
       h("h2", null, "Run complete"),
-      h("p", null, "Your base is fully lit. Free time is unlocked."),
-      h("p", { class: "muted" }, "Earned today: " + day.earned + " tokens")));
+      h("p", null, "Your base is fully lit."),
+      h("p", { class: "muted" }, "Earned today: " + day.earned + " points")));
   }
+  wrap.append(screenBreakCard(ctx, day));
 
   if (!day || !day.started) {
     const go = (o) => { emit(ctx, "run.start", { order: o }); render(root, ctx); };
@@ -274,6 +296,9 @@ function render(root, ctx) {
   const rack = dishRack(dayKey, ctx.kid);
   if (rack) wrap.append(h("p", { class: "muted dish" }, "Dishwasher this week: " + rack));
 
+  const lv = levelFor(weekPoints(kid, dayKey), cfg);
+  if (lv.next) wrap.append(h("p", { class: "muted level-line" }, (lv.next.at - lv.points) + " points to " + lv.next.name));
+  wrap.append(checklistNav(root, ctx, true));
   wrap.append(moreNav(root, ctx));
   root.append(wrap);
 }
