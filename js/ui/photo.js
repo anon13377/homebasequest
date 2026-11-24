@@ -27,6 +27,32 @@ export function isCleanJpeg(bytes) {
   return false;
 }
 
+/** copy of a JPEG with every APP1..APP15 (except the ICC color profile) and COM segment removed from the header.
+ * iPhone Safari's canvas encoder writes an EXIF APP1 block (size and color tags, no personal data); Chrome does not.
+ * Returns the input unchanged if it is not a JPEG or the header cannot be walked. */
+export function stripJpegMeta(bytes) {
+  if (!bytes || bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return bytes;
+  const keep = [bytes.subarray(0, 2)];
+  let i = 2;
+  while (i + 3 < bytes.length) {
+    if (bytes[i] !== 0xff) return bytes;
+    const m = bytes[i + 1];
+    if (m === 0xff) { i++; continue; }
+    if (m === 0xda || m === 0xd9) { keep.push(bytes.subarray(i)); break; }
+    const len = (bytes[i + 2] << 8) | bytes[i + 3];
+    if (len < 2 || i + 2 + len > bytes.length) return bytes;
+    const icc = m === 0xe2 && String.fromCharCode(...bytes.subarray(i + 4, i + 15)) === "ICC_PROFILE";
+    const meta = ((m >= 0xe1 && m <= 0xef) || m === 0xfe) && !icc;
+    if (!meta) keep.push(bytes.subarray(i, i + 2 + len));
+    i += 2 + len;
+  }
+  const total = keep.reduce((a, b) => a + b.length, 0);
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const k of keep) { out.set(k, o); o += k.length; }
+  return out;
+}
+
 /** default browser plumbing; tests pass a shim for the same three calls */
 const browserEnv = {
   async decode(file) {
@@ -67,10 +93,14 @@ export async function shrink(file, config, env) {
   let q = P.jpegQuality;
   for (let n = 0; n < MAX_TRIES; n++) {
     const w = Math.max(1, Math.floor(dim.w * scale)), h2 = Math.max(1, Math.floor(dim.h * scale));
-    const blob = await e.toBlob(e.render(src, w, h2), q);
-    if (blob && blob.size <= P.maxBytes) {
-      const bytes = new Uint8Array(await blob.arrayBuffer());
+    const raw = await e.toBlob(e.render(src, w, h2), q);
+    let blob = raw;
+    if (raw) {
+      const bytes = stripJpegMeta(new Uint8Array(await raw.arrayBuffer()));
       if (!isCleanJpeg(bytes)) throw new Error("not a clean jpeg");
+      blob = new Blob([bytes], { type: "image/jpeg" });
+    }
+    if (blob && blob.size <= P.maxBytes) {
       if (blob.size <= P.targetBytes || (q <= MIN_QUALITY)) return blob;
       q = Math.max(MIN_QUALITY, q - 0.15); // above the 150 KB goal: try a lower quality, keep the first that fits
       if (n === MAX_TRIES - 1) return blob;
