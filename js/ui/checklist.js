@@ -1,21 +1,27 @@
 // OVERHAUL v1. Kid screen "checklist": Before School, Kitchen Shutdown, Before Bed.
-// Tick only, 0 points, no photo, no events: ticks live on this device only (localStorage, per kid and day).
+// Tick only, 0 points, no photo. Ticks live in localStorage (per kid and day) and every change also appends a
+// kid event check.tick { list, ids: all ticked ids now } so the parent device sees them (latest event wins).
 
 import { CHECKLISTS } from "../../data/checklists.js";
-import { h, clear, nav, dayKeyOf, dayInfo } from "./today.js";
+import { h, clear, nav, dayKeyOf, dishRack, emit } from "./today.js";
 
 function tickKey(ctx, list) { return "hbq.tick." + ctx.kid + "." + dayKeyOf(ctx) + "." + list; }
 function loadTicks(ctx, list) {
-  try { return JSON.parse(globalThis.localStorage.getItem(tickKey(ctx, list)) || "[]"); } catch (e) { return []; }
+  let raw = null;
+  try { raw = globalThis.localStorage.getItem(tickKey(ctx, list)); } catch (e) { raw = null; }
+  if (raw !== null && raw !== undefined) { try { return JSON.parse(raw) || []; } catch (e) { return []; } }
+  // Nothing on this device yet: start from the synced ticks, if any.
+  const kid = ctx.state && ctx.state.kids && ctx.state.kids[ctx.kid];
+  const day = kid && kid.ticks && kid.ticks[dayKeyOf(ctx)];
+  return day && Array.isArray(day[list]) ? day[list].slice() : [];
 }
 function saveTicks(ctx, list, ids) {
   try { globalThis.localStorage.setItem(tickKey(ctx, list), JSON.stringify(ids)); } catch (e) { /* no storage: ticks stay on screen only */ }
 }
 
-/** Fill {rack.am} and {rack.pm} from DAYS dish for this kid and day. */
+/** Fill {rack.am} and {rack.pm} from the daily dishRack rotation. */
 export function fillText(text, dayKey, kid) {
-  const info = dayInfo(dayKey);
-  const rack = (when) => (info && info.dish && info.dish[when] && info.dish[when][kid]) || "your rack";
+  const rack = (when) => dishRack(dayKey, kid, when) || "your rack";
   return String(text).replace("{rack.am}", "your " + rack("am")).replace("{rack.pm}", rack("pm"));
 }
 
@@ -34,6 +40,7 @@ export function mount(root, ctx) {
     box.addEventListener("change", () => {
       if (box.checked) ticks.add(it.id); else ticks.delete(it.id);
       saveTicks(ctx, id, [...ticks]);
+      try { emit(ctx, "check.tick", { list: id, ids: [...ticks] }); } catch (e) { /* the tick stays on this device */ }
     });
     ul.append(h("li", null, h("label", { class: "step" }, box, " ", h("span", { class: "step-text" }, fillText(it.text, dayKey, ctx.kid)))));
   }
