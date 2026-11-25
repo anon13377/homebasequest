@@ -7,7 +7,9 @@ import { addDays, at, isSchoolDay, weekStart, weekKey, parseDay } from "./clock.
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 // OVERHAUL v1: buy.* and crate.open are retired. Old ones in the log are ignored like unknown types.
-const KID_TYPES = ["run.start", "step.done", "hw.set"];
+// check.tick: checklist ticks { list, ids }, full set, latest wins. Stored in kid.ticks[day][list], 0 points,
+// no day opened, no effect on asOf, earned, screen break, levels or streak. kid.ticks exists only once a tick does.
+const KID_TYPES = ["run.start", "step.done", "hw.set", "check.tick"];
 // SCOPE 3: only the two missions (Zone Mission, Room Reset) land on Verified for a pay on verified kid.
 // Homework, Reading and Land pay on Self for both kids. config.checkSteps overrides this default when present.
 const MISSION_STEPS = ["zone", "reset"];
@@ -227,6 +229,17 @@ export function reduce(events, config) {
     if (PARENT_TYPES.includes(type) && ev.role !== "parent") return;
     if (!KID_TYPES.includes(type) && !PARENT_TYPES.includes(type)) return; // unknown types kept, ignored
     if (type !== "config.set" && validDay(cfg.scoringStart) && ev.day < cfg.scoringStart) return; // fresh start
+    if (type === "check.tick") {
+      const tk = ev.data && typeof ev.data === "object" ? ev.data : {};
+      if (!validDay(ev.day) || typeof tk.list !== "string" || !tk.list || tk.list.length >= 40 || !Array.isArray(tk.ids)) return;
+      const ids = [];
+      for (const x of tk.ids) if (typeof x === "string" && x && x.length < 40 && !ids.includes(x) && ids.length < 30) ids.push(x);
+      const kid = state.kids[ev.kid];
+      if (!kid.ticks) kid.ticks = {};
+      if (!kid.ticks[ev.day]) kid.ticks[ev.day] = {};
+      kid.ticks[ev.day][tk.list] = ids;
+      return;
+    }
     if (asOf === null || ev.day > asOf) asOf = ev.day;
     const seq = typeof ev.seq === "number" ? ev.seq : i;
     const data = ev.data && typeof ev.data === "object" ? ev.data : {};
