@@ -2,7 +2,7 @@
 // Paths are relative to this file, so the app works from any subpath (for example a GitHub Pages project folder).
 // Same origin only: backend calls (another origin) never touch the cache.
 
-const VERSION = "hbq-v8";
+const VERSION = "hbq-v9";
 const FILES = [
   "./", "index.html", "guide.html", "manifest.webmanifest",
   "css/app.css", "css/kid.css", "css/parent.css",
