@@ -2,6 +2,7 @@
 // mount(root, ctx): ctx = { state, config, device, day, go, demo, ... }. Behind the PIN; kid devices see a refusal.
 
 import { weekPoints, levelFor } from "../rules.js";
+import { CHECKLISTS } from "../../data/checklists.js";
 import { h, gate, shell, kidIds, kidLabel, STATUS_LABELS, STEP_LABELS, dayKeyOf, photoIdFor, photoBox } from "./common.js";
 
 export async function mount(root, ctx) {
@@ -18,6 +19,16 @@ export function draw(root, ctx) {
 function lvName(ctx, pts) {
   const lv = levelFor(pts, ctx.config);
   return lv.reached ? lv.reached.name : "";
+}
+
+// One line per kid: "<title> n/total" for each checklist, from the synced check.tick events.
+export function tickLine(kid, day) {
+  const today = (kid && kid.ticks && kid.ticks[day]) || {};
+  return Object.keys(CHECKLISTS).map((id) => {
+    const items = CHECKLISTS[id].items;
+    const got = Array.isArray(today[id]) ? today[id].filter((x) => items.some((it) => it.id === x)).length : 0;
+    return CHECKLISTS[id].title + " " + got + "/" + items.length;
+  }).join(" \u00b7 ");
 }
 
 export function renderBoard(body, ctx) {
@@ -41,6 +52,7 @@ export function renderBoard(body, ctx) {
         h("span", { class: "chip", "data-screen-break": String(ds && ds.screen ? ds.screen : 0) }, "Screen break " + (ds && ds.screen ? ds.screen : 0) + " min"), " ",
         (lvName(ctx, weekPoints(kid, day))) ? h("span", { class: "chip", "data-level": "" }, lvName(ctx, weekPoints(kid, day))) : null, " ",
         h("span", { class: "chip", "data-streak": "" }, "Streak " + kid.streak)),
+      h("p", { class: "muted", "data-ticks": "" }, tickLine(kid, day)),
       ds ? null : h("p", { class: "muted", "data-notstarted": "" }, "Not started yet today."),
       list));
   }
