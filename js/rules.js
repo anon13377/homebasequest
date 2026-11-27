@@ -15,6 +15,10 @@ const KID_TYPES = ["run.start", "step.done", "hw.set", "check.tick"];
 const MISSION_STEPS = ["zone", "reset"];
 const payOnFor = (kidId, step, config) =>
   (config.checkSteps || MISSION_STEPS).includes(step) ? config.payOn[kidId] : "self";
+// msg (2026-11-26): message board { text 1..300 } in kid k's thread, from the kid (role kid) or Dad (role parent).
+// Stored in kids[k].msgs [{ seq, day, t, from, text }], never dropped by scoringStart, no points, no effect on asOf.
+export const MSG_MAX = 300;
+export const NOTE_MAX = 200;
 const PARENT_TYPES = ["check.pass", "check.fix", "adjust", "bonus.team", "door.test", "day.off", "config.set"];
 // bonus.team keys -> [token name, once per "day" | "week"].
 const TEAM_BONUS = { "kitchen-closed": ["kitchenClosed", "day"], "tote-dump": ["toteDump", "week"], "tote-timer": ["toteTimer", "week"], "lids-close": ["lidsClose", "week"] };
@@ -225,6 +229,15 @@ export function reduce(events, config) {
   list.forEach((ev, i) => {
     if (!validDay(ev.day)) return;
     const type = ev.type;
+    if (type === "msg") {
+      if (!isKid(ev.kid) || (ev.role !== "kid" && ev.role !== "parent")) return;
+      const text = ev.data && typeof ev.data.text === "string" ? ev.data.text.trim() : "";
+      if (!text || text.length > MSG_MAX) return;
+      const kid = state.kids[ev.kid];
+      if (!kid.msgs) kid.msgs = [];
+      kid.msgs.push({ seq: typeof ev.seq === "number" ? ev.seq : i, day: ev.day, t: typeof ev.t === "number" ? ev.t : 0, from: ev.role === "parent" ? "parent" : "kid", text });
+      return;
+    }
     if (KID_TYPES.includes(type) && (ev.role !== "kid" || !isKid(ev.kid))) return;
     if (PARENT_TYPES.includes(type) && ev.role !== "parent") return;
     if (!KID_TYPES.includes(type) && !PARENT_TYPES.includes(type)) return; // unknown types kept, ignored
@@ -283,9 +296,14 @@ export function reduce(events, config) {
         if (!d) return;
         const day = state.kids[k].days[d];
         if (day.steps[data.step] !== "self") return;
+        // Optional Dad note (2026-11-26): day.notes[step], latest wins; the pass ledger line carries it too.
+        const note = typeof data.note === "string" ? data.note.trim().slice(0, NOTE_MAX) : "";
+        if (note) { if (!day.notes) day.notes = {}; day.notes[data.step] = note; }
         if (type === "check.pass") {
           day.steps[data.step] = "verified";
+          const before = state.kids[k].ledger.length;
           payStep(k, d, data.step, "verified", seq);
+          if (note && state.kids[k].ledger.length > before) state.kids[k].ledger[state.kids[k].ledger.length - 1].note = note;
           checkComplete(k, d);
         } else {
           day.steps[data.step] = "fix";
@@ -300,7 +318,8 @@ export function reduce(events, config) {
         const reason = typeof data.reason === "string" ? data.reason.trim() : "";
         if (!Number.isInteger(n) || n === 0 || !reason) return;
         const kid = state.kids[k];
-        const applied = n > 0 ? n : -Math.min(kid.balance, -n);
+        // 2026-11-26: the full take applies (balance may go negative); weekPoints still floors at 0.
+        const applied = n;
         kid.balance += applied;
         kid.adjustments += applied;
         kid.ledger.push({ seq, day: ev.day, tokens: applied, why: "adjust: " + reason });

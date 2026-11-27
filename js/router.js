@@ -17,9 +17,16 @@ export const SCREENS = {
   "parent-requests": "./parent/requests.js", "parent-week": "./parent/week.js",
   "parent-editors": "./parent/editors.js", "parent-devices": "./parent/devices.js",
   "parent-settings": "./parent/settings.js", "parent-pin": "./parent/pin.js",
+  messages: "./ui/messages.js", "parent-messages": "./parent/messages.js",
 };
 // Screens that are safe to redraw when a pull brings new events (no timers or half filled forms).
-const REDRAW = new Set(["today", "tickets", "history", "parent-board", "parent-checks", "parent-requests", "parent-week"]);
+const REDRAW = new Set(["today", "tickets", "history", "parent-board", "parent-checks", "parent-requests", "parent-week", "messages", "parent-messages"]);
+
+/** Throttled caller: fn runs at most once per gapMs (wake pulls on visibilitychange, focus, pageshow). */
+export function throttle(fn, gapMs = 5000, clock = () => Date.now()) {
+  let last = -Infinity;
+  return () => { const n = clock(); if (n - last < gapMs) return false; last = n; fn(); return true; };
+}
 const BAD_PART = new Set(["", "__proto__", "constructor", "prototype"]);
 
 /** Default config with every parent config.set folded in, oldest first (same rule as the server). */
@@ -162,6 +169,11 @@ export async function boot(root) {
     pullNow(root, ctx);
     setInterval(() => pullNow(root, ctx), every);
     addEventListener("online", () => pullNow(root, ctx));
+    // iPhone PWAs freeze timers in the background: pull again when the app comes back to the front.
+    const wake = throttle(() => pullNow(root, ctx), 5000);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") wake(); });
+    addEventListener("focus", wake);
+    addEventListener("pageshow", wake);
   }
   return ctx;
 }
