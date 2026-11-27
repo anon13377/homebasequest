@@ -29,11 +29,13 @@ export function mount(root, ctx) {
     wrap.append(h("section", { class: "card" }, h("p", { class: "muted" }, "Nothing yet. Finish a step to earn your first tokens.")));
   } else {
     const ul = h("ul", { class: "ledger" });
+    let lastDay = null;
     for (const l of lines) {
       const plus = l.tokens > 0;
+      if (l.day !== lastDay) { lastDay = l.day; ul.append(h("li", { class: "ledger-dayhead", "data-dayhead": l.day }, h("b", null, l.day))); }
       ul.append(h("li", { class: "ledger-line " + (plus ? "plus" : "minus"), "data-tokens": String(l.tokens), "data-day": l.day },
         h("span", { class: "ledger-day" }, l.day),
-        h("span", { class: "ledger-why" }, whyText(ctx.config, l.why)),
+        h("span", { class: "ledger-why" }, whyText(ctx.config, l.why) + (l.note ? " (Dad says: " + l.note + ")" : "")),
         h("span", { class: "ledger-amt" }, (plus ? "+" : "") + l.tokens)));
     }
     wrap.append(ul);

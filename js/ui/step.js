@@ -89,6 +89,7 @@ export function mount(root, ctx) {
   if (info && step === "zone") card.append(h("p", { class: "muted" }, info.zone + " : " + info.room));
   if (info && info.rule && missionStep) card.append(h("p", { class: "rule-line" }, info.rule));
   if (fixing) card.append(h("p", { class: "fix-banner", role: "status" }, "Fix list. Redo only the items below, then tap Done."));
+  if (day && day.notes && day.notes[step]) card.append(h("p", { class: "dad-note", "data-dad-note": step }, "Dad says: " + day.notes[step]));
 
   if (doneAlready) {
     card.append(h("p", { class: "done-note", role: "status" }, status === "verified" ? "Checked. Nice work." : "Done. Waiting for Dad's check."));

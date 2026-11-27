@@ -119,11 +119,13 @@ export function currentStep(ctx) {
   return null;
 }
 
-/** Dishwasher racks swap weekly; weeks start Sunday. Week of Sunday 2026-11-15: E top, M bottom. */
-export function dishRack(dayKey, kid) {
+/** Dishwasher racks swap EVERY day (weekends too). Mon 2026-11-23: E top, M bottom (morning unload).
+ *  when = "am" (unload) or "pm" (load, the opposite rack). Matches the Nov/Dec printable calendar. */
+export function dishRack(dayKey, kid, when = "am") {
   if (kid !== "e" && kid !== "m") return null;
-  const sunday = daysBetween("2026-11-15", dayKey) - weekday(dayKey);
-  const eTop = (((sunday / 7) % 2) + 2) % 2 === 0;
+  const n = daysBetween("2026-11-23", dayKey);
+  let eTop = ((n % 2) + 2) % 2 === 0;
+  if (when === "pm") eTop = !eTop;
   return (kid === "e") === eTop ? "top rack" : "bottom rack";
 }
 
@@ -179,11 +181,22 @@ export function mount(root, ctx) {
   render(root, ctx);
 }
 
+// Message board unread: Dad messages past the count this kid has seen on this device (localStorage, best effort).
+const seenKey = (kid) => "hbq:msgseen:" + kid;
+function ls() { try { return globalThis.localStorage || null; } catch (e) { return null; } }
+export function seenMsgs(kid) { const s = ls(); return s ? Number(s.getItem(seenKey(kid))) || 0 : 0; }
+export function markMsgsSeen(kid, n) { const s = ls(); if (s) try { s.setItem(seenKey(kid), String(n)); } catch (e) { /* full */ } }
+export function unreadMsgs(ctx) {
+  const m = ((kidState(ctx) || {}).msgs || []).filter((x) => x.from === "parent").length;
+  return Math.max(0, m - seenMsgs(ctx.kid));
+}
+
 /** My base, Levels, History. Shown on run days and no run days alike. OVERHAUL v1: the shop is retired. */
 function moreNav(root, ctx) {
   const nav2 = h("nav", { class: "run-nav", "aria-label": "More" });
-  for (const [screen, label] of [["base", "My base"], ["levels", "Levels"], ["history", "History"]]) {
-    nav2.append(h("button", { type: "button", "data-go": screen, onclick: () => nav(root, ctx, screen) }, label));
+  for (const [screen, label] of [["base", "My base"], ["levels", "Levels"], ["history", "History"], ["messages", "Messages"]]) {
+    const dot = screen === "messages" && unreadMsgs(ctx) > 0 ? h("span", { class: "unread-dot", "data-unread": "", "aria-label": "New message" }, "\u25cf") : null;
+    nav2.append(h("button", { type: "button", "data-go": screen, onclick: () => nav(root, ctx, screen) }, label, dot ? " " : null, dot));
   }
   return nav2;
 }
@@ -287,14 +300,15 @@ function render(root, ctx) {
       h("span", { class: "dot", "aria-hidden": "true" }, st === "self" || st === "verified" ? "✓" : String(i + 1)),
       h("span", { class: "step-text" },
         h("span", { class: "step-name" }, STEP_LABELS[s]),
-        h("span", { class: "step-status" }, statusLine(ctx, s, st))),
+        h("span", { class: "step-status" }, statusLine(ctx, s, st)),
+        day && day.notes && day.notes[s] ? h("span", { class: "dad-note", "data-dad-note": s }, "Dad says: " + day.notes[s]) : null),
       tok > 0 ? h("span", { class: "coin-chip" }, "+" + tok) : h("span", { class: "chip must" }, "Must do"));
     list.append(h("li", null, btn));
   });
   wrap.append(list);
 
   const rack = dishRack(dayKey, ctx.kid);
-  if (rack) wrap.append(h("p", { class: "muted dish" }, "Dishwasher this week: " + rack));
+  if (rack) wrap.append(h("p", { class: "muted dish" }, "Dishwasher today: " + rack));
 
   const lv = levelFor(weekPoints(kid, dayKey), cfg);
   if (lv.next) wrap.append(h("p", { class: "muted level-line" }, (lv.next.at - lv.points) + " points to " + lv.next.name));
