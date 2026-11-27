@@ -2,16 +2,16 @@
 // Paths are relative to this file, so the app works from any subpath (for example a GitHub Pages project folder).
 // Same origin only: backend calls (another origin) never touch the cache.
 
-const VERSION = "hbq-v9";
+const VERSION = "hbq-v10";
 const FILES = [
   "./", "index.html", "guide.html", "manifest.webmanifest",
   "css/app.css", "css/kid.css", "css/parent.css",
   "data/checklists.js", "data/config.js", "data/shop.js", "data/tasks.js", "data/unlocks.js",
   "js/clock.js", "js/demo.js", "js/router.js", "js/rules.js", "js/setup.js", "js/store.js", "js/sync.js",
-  "js/ui/base.js", "js/ui/checklist.js", "js/ui/levels.js", "js/ui/history.js", "js/ui/homework.js", "js/ui/photo.js", "js/ui/shop.js",
+  "js/ui/base.js", "js/ui/checklist.js", "js/ui/levels.js", "js/ui/messages.js", "js/ui/history.js", "js/ui/homework.js", "js/ui/photo.js", "js/ui/shop.js",
   "js/ui/step.js", "js/ui/tickets.js", "js/ui/today.js", "js/ui/who.js",
   "js/parent/board.js", "js/parent/checks.js", "js/parent/common.js", "js/parent/devices.js",
-  "js/parent/editors.js", "js/parent/pin.js", "js/parent/requests.js", "js/parent/settings.js", "js/parent/week.js",
+  "js/parent/editors.js", "js/parent/messages.js", "js/parent/pin.js", "js/parent/requests.js", "js/parent/settings.js", "js/parent/week.js",
   "vendor/qrcode.mjs",
   "assets/base/base-reference.svg",
   "assets/fonts/atkinson-hyperlegible-400.woff2", "assets/fonts/atkinson-hyperlegible-700.woff2",
