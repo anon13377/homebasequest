@@ -11,13 +11,15 @@ import * as store from "../store.js";
 export { h, clear, dayKeyOf, STEP_LABELS };
 
 export const VIEWS = [
-  ["parent-board", "Today"], ["parent-checks", "Checks"], ["parent-requests", "Requests"], ["parent-week", "Week"],
+  ["parent-board", "Today"], ["parent-checks", "Checks"], ["parent-requests", "Requests"], ["parent-week", "Week"], ["parent-messages", "Messages"],
   ["parent-editors", "Editors"], ["parent-devices", "Devices"], ["parent-settings", "Settings"],
 ];
 export const STATUS_LABELS = { todo: "To do", self: "Needs check", verified: "Checked", fix: "Fix list" };
 export const kidLabel = (ctx, k) => (ctx.device && ctx.device.names && ctx.device.names[k]) || k.toUpperCase();
 export const isParentDevice = (ctx) => !!ctx.device && ctx.device.role === "parent";
 export const kidIds = (ctx) => Object.keys(ctx.state.kids);
+/** Kids whose newest message is from the kid (Dad has not answered yet). */
+export const kidsWaiting = (ctx) => kidIds(ctx).filter((k) => { const m = ctx.state.kids[k].msgs || []; return m.length && m[m.length - 1].from === "kid"; }).length;
 
 export function eventsOf(ctx) {
   if (Array.isArray(ctx.events)) return ctx.events;
@@ -108,7 +110,7 @@ export function shell(root, ctx, view, title) {
   const q = checkQueue(ctx).length, r = heldTickets(ctx).length;
   const nav = h("nav", { class: "pnav", "aria-label": "Parent sections" });
   for (const [v, label] of VIEWS) {
-    const badge = v === "parent-checks" ? q : v === "parent-requests" ? r : 0;
+    const badge = v === "parent-checks" ? q : v === "parent-requests" ? r : v === "parent-messages" ? kidsWaiting(ctx) : 0;
     nav.append(h("button", {
       type: "button", class: "pnav-btn" + (v === view ? " active" : ""), "data-nav": v.replace("parent-", ""),
       "aria-current": v === view ? "page" : null, onclick: () => goto(root, ctx, v),

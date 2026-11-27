@@ -2,6 +2,7 @@
 // mount(root, ctx): ctx = { state, config, device, day, go, demo, ... }. Behind the PIN; kid devices see a refusal.
 
 import { weekPoints, levelFor } from "../rules.js";
+import { addDays } from "../clock.js";
 import { CHECKLISTS } from "../../data/checklists.js";
 import { h, gate, shell, kidIds, kidLabel, STATUS_LABELS, STEP_LABELS, dayKeyOf, photoIdFor, photoBox } from "./common.js";
 
@@ -10,9 +11,25 @@ export async function mount(root, ctx) {
   return draw(root, ctx);
 }
 
+// Day shown on the board: null = today (2026-11-26 day picker for earlier days).
+let boardDay = null;
+export function setBoardDay(d) { boardDay = typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null; }
+export function getBoardDay() { return boardDay; }
+
 export function draw(root, ctx) {
-  const body = shell(root, ctx, "parent-board", "Today");
-  renderBoard(body, ctx);
+  const today = dayKeyOf(ctx);
+  if (boardDay && boardDay >= today) boardDay = null;
+  const body = shell(root, ctx, "parent-board", boardDay ? "Board for " + boardDay : "Today");
+  const shown = boardDay || today;
+  const redo = () => draw(root, ctx);
+  const pick = h("input", { type: "date", class: "day-pick", "data-board-date": "", value: shown, max: today, "aria-label": "Pick a day",
+    onchange: () => { setBoardDay(pick.value); redo(); } });
+  body.append(h("div", { class: "btn-row day-nav", "data-day-nav": "" },
+    h("button", { type: "button", class: "btn-secondary", "data-day-prev": "", onclick: () => { setBoardDay(addDays(shown, -1)); redo(); } }, "< Previous day"),
+    pick,
+    h("button", { type: "button", class: "btn-secondary", "data-day-next": "", disabled: boardDay ? null : "", onclick: () => { setBoardDay(addDays(shown, 1)); redo(); } }, "Next day >"),
+    boardDay ? h("button", { type: "button", class: "btn-secondary", "data-day-today": "", onclick: () => { setBoardDay(null); redo(); } }, "Today") : null));
+  renderBoard(body, ctx, shown);
   return body;
 }
 
@@ -31,8 +48,9 @@ export function tickLine(kid, day) {
   }).join(" \u00b7 ");
 }
 
-export function renderBoard(body, ctx) {
-  const day = dayKeyOf(ctx);
+export function renderBoard(body, ctx, shownDay) {
+  const day = shownDay || dayKeyOf(ctx);
+  const isToday = day === dayKeyOf(ctx);
   for (const k of kidIds(ctx)) {
     const kid = ctx.state.kids[k];
     const ds = kid.days[day];
@@ -53,7 +71,7 @@ export function renderBoard(body, ctx) {
         (lvName(ctx, weekPoints(kid, day))) ? h("span", { class: "chip", "data-level": "" }, lvName(ctx, weekPoints(kid, day))) : null, " ",
         h("span", { class: "chip", "data-streak": "" }, "Streak " + kid.streak)),
       h("p", { class: "muted", "data-ticks": "" }, tickLine(kid, day)),
-      ds ? null : h("p", { class: "muted", "data-notstarted": "" }, "Not started yet today."),
+      ds ? null : h("p", { class: "muted", "data-notstarted": "" }, isToday ? "Not started yet today." : "No run that day."),
       list));
   }
 }

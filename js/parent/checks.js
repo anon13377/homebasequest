@@ -30,6 +30,8 @@ export function renderChecks(body, ctx, rerender) {
   if (!queue.length) { body.append(h("p", { class: "muted", "data-empty": "" }, "Nothing waiting for a check.")); return; }
   for (const q of queue) {
     const picks = new Set();
+    const noteIn = h("input", { type: "text", maxlength: "200", class: "reason", "data-note": "", "aria-label": "Note for " + kidLabel(ctx, q.kid), placeholder: "Note for " + kidLabel(ctx, q.kid) + " (optional)" });
+    const withNote = (d) => { const n = String(noteIn.value || "").trim().slice(0, 200); if (n) d.note = n; return d; };
     const fixBox = h("div", { class: "fixlist", "data-fixlist": "", hidden: "" });
     for (const it of fixItems(ctx, q)) {
       fixBox.append(h("label", { class: "fix-item" },
@@ -37,15 +39,16 @@ export function renderChecks(body, ctx, rerender) {
         " " + String(it.text).replace(/<\/?b>/gi, "")));
     }
     fixBox.append(h("button", { type: "button", class: "btn-danger", "data-sendfix": "", onclick: () =>
-      act(body, ctx, rerender, q.kid, "check.fix", { step: q.step, day: q.day, items: [...picks] }, "Sent to " + kidLabel(ctx, q.kid) + " as a fix list.") }, "Send fix list"));
+      act(body, ctx, rerender, q.kid, "check.fix", withNote({ step: q.step, day: q.day, items: [...picks] }), "Sent to " + kidLabel(ctx, q.kid) + " as a fix list.") }, "Send fix list"));
     const fixBtn = h("button", { type: "button", class: "btn-secondary", "data-fix": "", onclick: () => { fixBox.hidden = false; } }, "Fix list");
     body.append(h("section", { class: "card pcard kid-" + q.kid, "data-check": q.kid + "|" + q.day + "|" + q.step, "data-kid": q.kid },
       h("h2", null, kidLabel(ctx, q.kid) + ": " + (STEP_LABELS[q.step] || q.step)),
       h("p", { class: "muted" }, q.day),
       photoBox(ctx, q.photo),
+      h("label", { class: "note-row" }, "Note for " + kidLabel(ctx, q.kid) + " (optional) ", noteIn),
       h("div", { class: "btn-row" },
         h("button", { type: "button", class: "btn-success", "data-pass": "", onclick: () =>
-          act(body, ctx, rerender, q.kid, "check.pass", { step: q.step, day: q.day }, "Passed.") }, "Pass"),
+          act(body, ctx, rerender, q.kid, "check.pass", withNote({ step: q.step, day: q.day }), "Passed.") }, "Pass"),
         fixBtn),
       fixBox));
   }

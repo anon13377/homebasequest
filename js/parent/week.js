@@ -9,8 +9,13 @@ export async function mount(root, ctx) {
   return draw(root, ctx);
 }
 
+// Week shown: 0 = this week, -1 = last week, ... (2026-11-26 previous weeks). Kept while the app is open.
+let weekOffset = 0;
+export function setWeekOffset(n) { weekOffset = Math.min(0, Math.trunc(Number(n) || 0)); }
+export function getWeekOffset() { return weekOffset; }
+
 export function draw(root, ctx) {
-  const body = shell(root, ctx, "parent-week", "This week");
+  const body = shell(root, ctx, "parent-week", weekOffset === 0 ? "This week" : "Earlier week");
   renderWeek(body, ctx, () => draw(root, ctx));
   return body;
 }
@@ -18,7 +23,12 @@ export function draw(root, ctx) {
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function renderWeek(body, ctx, rerender) {
-  const start = weekStart(dayKeyOf(ctx));
+  const cur = weekOffset === 0;
+  const start = addDays(weekStart(dayKeyOf(ctx)), 7 * weekOffset);
+  body.append(h("div", { class: "btn-row week-nav", "data-week-nav": "" },
+    h("button", { type: "button", class: "btn-secondary", "data-week-prev": "", onclick: () => { setWeekOffset(weekOffset - 1); rerender(); } }, "< Previous week"),
+    h("span", { class: "week-label", "data-week-label": start }, (cur ? "This week: " : "Week of ") + start + " to " + addDays(start, 6)),
+    h("button", { type: "button", class: "btn-secondary", "data-week-next": "", disabled: cur ? "" : null, onclick: () => { setWeekOffset(weekOffset + 1); rerender(); } }, "Next week >")));
   for (let i = 0; i < 7; i++) {
     const day = addDays(start, i);
     if (!isSchoolDay(day, ctx.config)) continue;
@@ -41,7 +51,7 @@ export function renderWeek(body, ctx, rerender) {
       }
       card.append(line);
       const dt = ctx.config.doorTest || { kids: [] };
-      if ((dt.kids || []).includes(k) && !(ds && ds.door)) {
+      if (cur && (dt.kids || []).includes(k) && !(ds && ds.door)) {
         card.append(h("p", { class: "door-row", "data-door-kid": k }, kidLabel(ctx, k) + " Door Test: ",
           h("button", { type: "button", class: "btn-secondary", "data-door-pass": day, onclick: () =>
             act(body, ctx, rerender, k, "door.test", { day, pass: true }, "Door Test pass saved.") }, "Pass"), " ",
@@ -49,6 +59,7 @@ export function renderWeek(body, ctx, rerender) {
             act(body, ctx, rerender, k, "door.test", { day, pass: false }, "Door Test miss saved.") }, "Miss")));
       }
     }
+    if (!cur) { body.append(card); continue; }
     const why = h("input", { type: "text", maxlength: "60", class: "reason", "data-why": "", "aria-label": "Why a day off", placeholder: "Why (sick, trip...)" });
     card.append(why, h("button", { type: "button", class: "btn-secondary", "data-dayoff": day, onclick: () => {
       const w = String(why.value || "").trim();
